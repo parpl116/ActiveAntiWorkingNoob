@@ -257,19 +257,21 @@ def create_restricted_window():
     
     input_text = ""
     session = 0
-    max_sessions = 3  # Sessions 0, 1, 2
+    max_sessions = 4  # Sessions 0, 1, 2, 3
     
     # Passwords for each session
     passwords = {
         0: "fecdcfebfceb",
-        1: "macek",
-        2: "nose"
+        1: "zengynahrad",
+        2: "macek",
+        3: "nose"
     }
 
     hits = {
         0: "The password is fecdcfebfceb",
-        1: "Who is the best teacher ever?",
-        2: "The best word we all know that starts with n"
+        1: "The password is 122 101 110 103 121 110 97 104 114 97 100",
+        2: "Who is the best teacher ever?",
+        3: "The best word we all know that starts with n"
     }
     
     running = True
